@@ -312,6 +312,8 @@ bool target_direction;
 void get_arc_coordinates();
 bool setTargetedHotend(int code);
 
+float probe_bed_iterative(float x, float y);
+
 void serial_echopair_P(const char *s_P, float v)
     { serialprintPGM(s_P); SERIAL_ECHO(v); }
 void serial_echopair_P(const char *s_P, double v)
@@ -1991,13 +1993,14 @@ void process_commands()
         SERIAL_ECHOLN("Adjusting for bed tilt");
         SERIAL_ECHOLN("");
       
-        // Define constants for point calculations on bed
-        const float _COS_90 = 0;
-        const float _SIN_90 = 1;
-        const float _COS_210 = -0.866;
-        const float _SIN_210 = -0.5;
-        const float _COS_330 = 0.866
-        const float _SIN_330 = -0.5;
+        // Define point calculations on bed
+        float _COS_90, _SIN_90, _COS_210, _SIN_210, _COS_330, _SIN_330;
+        _COS_90 = 0.0;
+        _SIN_90 = 1.0;
+        _COS_210 = -0.866;
+        _SIN_210 = -0.5;
+        _COS_330 = 0.866;
+        _SIN_330 = -0.5;
       
         // Variables for storing each probe result
         float tilt_probe_array[3];
@@ -2017,10 +2020,14 @@ void process_commands()
 
 
       // Print out a report of the positions
-      SERIAL_ECHOPAIR("Center: ", center_probe_result; SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("X Tower: ", tilt_probe_array[0]); SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("Y Tower: ", tilt_probe_array[1]); SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("Z Tower: ", tilt_probe_array[2]); SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Center: ", center_probe_result); 
+      SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("X Tower: ", tilt_probe_array[0]); 
+      SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Y Tower: ", tilt_probe_array[1]); 
+      SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Z Tower: ", tilt_probe_array[2]); 
+      SERIAL_ECHOLN("");
       
       // Adjust X Endstop
       if (center_probe_result < tilt_probe_array[0])
@@ -2059,10 +2066,13 @@ void process_commands()
       // Home the printer
       home_delta_axis();
       
-      SERIAL_ECHOLN("Tilt adjustment complete. New endstop values:")
-      SERIAL_ECHOPAIR("X Tower: ", endstop_adj[0]); SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("Y Tower: ", endstop_adj[1]); SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("Z Tower: ", endstop_adj[2]); SERIAL_ECHOLN("");
+      SERIAL_ECHOLN("Tilt adjustment complete. New endstop values:");
+      SERIAL_ECHOPAIR("X Tower: ", endstop_adj[0]);
+      SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Y Tower: ", endstop_adj[1]); 
+      SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Z Tower: ", endstop_adj[2]); 
+      SERIAL_ECHOLN("");
       
       break;
 
