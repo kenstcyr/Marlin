@@ -1983,7 +1983,90 @@ void process_commands()
         //Restore saved variables
         feedrate = saved_feedrate;
         feedmultiply = saved_feedmultiply;
-        break; 
+        break;
+   
+    // ---- Automatic Bed tilt adjustment ----
+    // ---- Added by Ken St. Cyr ----    
+    case 31:
+        SERIAL_ECHOLN("Adjusting for bed tilt");
+        SERIAL_ECHOLN("");
+      
+        // Define constants for point calculations on bed
+        const float _COS_90 = 0;
+        const float _SIN_90 = 1;
+        const float _COS_210 = -0.866;
+        const float _SIN_210 = -0.5;
+        const float _COS_330 = 0.866
+        const float _SIN_330 = -0.5;
+      
+        // Variables for storing each probe result
+        float tilt_probe_array[3];
+        float center_probe_result;
+        
+        // Probe the Center
+        center_probe_result = probe_bed_iterative(0, 0);
+        
+        // Probe near X Tower @ 210 Degrees
+        tilt_probe_array[0] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * _COS_210, (BED_DIAMETER / 2 - 5) * _SIN_210);
+   
+        // Probe near Y Tower @ 330 Degrees     
+        tilt_probe_array[1] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * _COS_330, (BED_DIAMETER / 2 - 5) * _SIN_330);     
+
+        // Probe near Z Tower @ 90 Degrees
+        tilt_probe_array[2] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * _COS_90, (BED_DIAMETER / 2 - 5) * _SIN_90);       
+
+
+      // Print out a report of the positions
+      SERIAL_ECHOPAIR("Center: ", center_probe_result; SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("X Tower: ", tilt_probe_array[0]); SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Y Tower: ", tilt_probe_array[1]); SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Z Tower: ", tilt_probe_array[2]); SERIAL_ECHOLN("");
+      
+      // Adjust X Endstop
+      if (center_probe_result < tilt_probe_array[0])
+          endstop_adj[0] += tilt_probe_array[0] - center_probe_result;
+      else
+          endstop_adj[0] += center_probe_result - tilt_probe_array[0];  
+      
+      // Adjust Y Endstop
+      if (center_probe_result < tilt_probe_array[1])
+          endstop_adj[1] += tilt_probe_array[1] - center_probe_result;
+      else
+          endstop_adj[1] += center_probe_result - tilt_probe_array[1]; 
+      
+      // Adjust Z Endstop
+      if (center_probe_result < tilt_probe_array[2])
+          endstop_adj[2] += tilt_probe_array[2] - center_probe_result;
+      else
+          endstop_adj[2] += center_probe_result - tilt_probe_array[2];
+      
+      // Figure out which endstop is the highest up
+      float highest_endstop;
+      highest_endstop = endstop_adj[0];
+      if (endstop_adj[1] > highest_endstop) highest_endstop = endstop_adj[1];
+      if (endstop_adj[2] > highest_endstop) highest_endstop = endstop_adj[2];
+      
+      // Adjust all of the endstops so the highest one is at position zero
+      for (int i = 0; i < 3; i++)
+      {
+          endstop_adj[i] -= highest_endstop;
+      }    
+       
+      // Adjust the bed height accordingly
+      max_pos[Z_AXIS] -= highest_endstop;
+      set_delta_constants();          
+      
+      // Home the printer
+      home_delta_axis();
+      
+      SERIAL_ECHOLN("Tilt adjustment complete. New endstop values:")
+      SERIAL_ECHOPAIR("X Tower: ", endstop_adj[0]); SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Y Tower: ", endstop_adj[1]); SERIAL_ECHOLN("");
+      SERIAL_ECHOPAIR("Z Tower: ", endstop_adj[2]); SERIAL_ECHOLN("");
+      
+      break;
+
+    
     case 90: // G90
       relative_mode = false;
       break;
@@ -3849,3 +3932,34 @@ bool setTargetedHotend(int code){
   return false;
 }
 
+
+// ---- Probes the bed at a single point, using an iterative check. ----
+// ---- Added by Ken St. Cyr ----
+float probe_bed_iterative(float x, float y)
+{
+    // Set the nozzel position to 50mm above the bed before probing begins
+    destination[X_AXIS] = x - z_probe_offset[X_AXIS];
+    destination[Y_AXIS] = y - z_probe_offset[Y_AXIS];
+    destination[Z_AXIS] = 50;
+    
+    // Set the feedrate to the homing feedrate - speeds things up
+    feedrate = homing_feedrate[Z_AXIS];
+    
+    // Move the nozzle to z = 50
+    prepare_move();
+    st_synchronize();
+    
+    // Slow down the feedrate a bit
+    feedrate = 5000;
+    
+    // Iteratively lower the probe in 0.1 mm increments until we see the Z Probe trigger
+    while(READ(Z_MIN_PIN) == false)
+    {
+        destination[Z_AXIS] -= 0.1;
+        prepare_move();
+        st_synchronize();
+    }
+    
+    // Returns the position of the nozzle when the probe deployed
+    return destination[Z_AXIS];
+}
