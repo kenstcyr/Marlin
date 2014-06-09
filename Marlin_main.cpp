@@ -250,6 +250,18 @@ float delta_tmp[3] = {0.0, 0.0, 0.0};
 const char axis_codes[NUM_AXIS] = {'X', 'Y', 'Z', 'E'};
 const float SIN_60 = 0.8660254037844386;
 const float COS_60 = 0.5;
+const float COS_30 = 0.8660254037844386;
+const float SIN_30 = 0.5;
+const float COS_90 = 0.0;
+const float SIN_90 = 1.0;
+const float COS_150 = -0.8660254037844386;
+const float SIN_150 = 0.5;
+const float COS_210 = -0.8660254037844386;
+const float SIN_210 = -0.5;
+const float COS_270 = 0.0;
+const float SIN_270 = -1.0;
+const float COS_330 = 0.8660254037844386;
+const float SIN_330 = -0.5;
 static float destination[NUM_AXIS] = {  0.0, 0.0, 0.0, 0.0};
 static float offset[3] = {0.0, 0.0, 0.0};
 static float bed_level[7][7] = {
@@ -313,6 +325,8 @@ void get_arc_coordinates();
 bool setTargetedHotend(int code);
 
 float probe_bed_iterative(float x, float y);
+boolean is_concave(float center_value, float probe_points[6]);
+boolean is_convex(float center_value, float probe_points[6]);
 
 void serial_echopair_P(const char *s_P, float v)
     { serialprintPGM(s_P); SERIAL_ECHO(v); }
@@ -1993,14 +2007,6 @@ void process_commands()
         SERIAL_ECHOLN("Adjusting for bed tilt");
         SERIAL_ECHOLN("");
       
-        // Define point calculations on bed
-        float _COS_90, _SIN_90, _COS_210, _SIN_210, _COS_330, _SIN_330;
-        _COS_90 = 0.0;
-        _SIN_90 = 1.0;
-        _COS_210 = -0.866;
-        _SIN_210 = -0.5;
-        _COS_330 = 0.866;
-        _SIN_330 = -0.5;
       
         // Variables for storing each probe result
         float tilt_probe_array[3];
@@ -2010,13 +2016,13 @@ void process_commands()
         center_probe_result = probe_bed_iterative(0, 0);
         
         // Probe near X Tower @ 210 Degrees
-        tilt_probe_array[0] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * _COS_210, (BED_DIAMETER / 2 - 5) * _SIN_210);
+        tilt_probe_array[0] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_210, (BED_DIAMETER / 2 - 5) * SIN_210);
    
         // Probe near Y Tower @ 330 Degrees     
-        tilt_probe_array[1] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * _COS_330, (BED_DIAMETER / 2 - 5) * _SIN_330);     
+        tilt_probe_array[1] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_330, (BED_DIAMETER / 2 - 5) * SIN_330);     
 
         // Probe near Z Tower @ 90 Degrees
-        tilt_probe_array[2] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * _COS_90, (BED_DIAMETER / 2 - 5) * _SIN_90);       
+        tilt_probe_array[2] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_90, (BED_DIAMETER / 2 - 5) * SIN_90);       
 
 
       // Print out a report of the positions
@@ -2076,7 +2082,97 @@ void process_commands()
       
       break;
 
-    
+    // ---- Automatic Delta Radius adjustment ----
+    // ---- Added by Ken St. Cyr ---- 
+    case 32:
+      SERIAL_ECHOLN("Checking Delta Radius");
+      SERIAL_ECHOLN("");
+      
+      float probe_array[3];
+      float center_value;
+      
+      // Probe each position and store the results in an array
+      center_value = probe_bed_iterative(0, 0);
+      probe_array[0] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_90, (BED_DIAMETER / 2 - 5) * SIN_90);
+      probe_array[1] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_210, (BED_DIAMETER / 2 - 5) * SIN_210);
+      probe_array[2] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_330, (BED_DIAMETER / 2 - 5) * SIN_330);
+
+      // Print out a report of the positions
+      SERIAL_ECHOPAIR("Center: ", center_value);
+      SERIAL_ECHOLN("");
+      for (int i=0; i < 3; i++)
+      {
+          SERIAL_ECHO("Position ");
+          SERIAL_ECHO(i);
+          SERIAL_ECHO(": ");
+          SERIAL_PROTOCOL_F(probe_array[i], 2);
+          SERIAL_ECHOLN(""); 
+      }
+      
+      while (is_concave(center_value, probe_array) || is_convex(center_value, probe_array))
+      {
+          // Check Delta Geometry
+          if (is_concave(center_value, probe_array))
+          {
+              // Printer is concave - decrease delta radius
+              delta_radius -= .1; 
+          }
+          else if (is_convex(center_value, probe_array))
+          {
+              /// Printer is convex - increase delta radius
+              delta_radius += .1;
+          }
+          
+          set_delta_constants();
+          
+          SERIAL_ECHOPAIR("New Delta Radius: ", delta_radius);
+          SERIAL_ECHOLN("");
+          
+          home_delta_axis();
+          
+          center_value = probe_bed_iterative(0, 0);
+          probe_array[0] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_90, (BED_DIAMETER / 2 - 5) * SIN_90);
+          probe_array[1] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_210, (BED_DIAMETER / 2 - 5) * SIN_210);
+          probe_array[2] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_330, (BED_DIAMETER / 2 - 5) * SIN_330);
+          
+          // Print out a report of the positions
+          SERIAL_ECHOPAIR("Center: ", center_value);
+          SERIAL_ECHOLN("");
+          for (int i=0; i < 3; i++)
+          {
+              SERIAL_ECHO("Position ");
+              SERIAL_ECHO(i);
+              SERIAL_ECHO(": ");
+              SERIAL_PROTOCOL_F(probe_array[i], 2);
+              SERIAL_ECHOLN(""); 
+          }
+      }
+      
+      // Home the printer
+      home_delta_axis();
+      break;
+      
+    // ---- Automatic Bed Height adjustment ----
+    // ---- Added by Ken St. Cyr ---- 
+    case 33:
+      float bed_adjustment_delta;
+      
+      // Probe the bed and add the probe offset to determine how far off the nozzle is from
+      // the bed.  A positive value indicates that there is a gap between the nozzle and bed
+      // and a negative value indicates that the nozzle is hitting the bed too early.
+      bed_adjustment_delta = probe_bed_iterative(0, 0) + z_probe_offset[Z_AXIS];
+      
+      // Adjust the bed height by subtracting the calculated gap/overlap from the existing
+      // bed height. If the gap/overlap is positive, the bed height needs to be lowered to make
+      // the bed shorter.  If it's negative, it indicates an overlap and the bed needs to be
+      // made bigger.
+      max_pos[Z_AXIS] -= bed_adjustment_delta;
+      set_delta_constants();
+      
+      // Re-home the printer in order for the adjustment to take effect.
+      home_delta_axis();
+      break;
+      
     case 90: // G90
       relative_mode = false;
       break;
@@ -3970,6 +4066,59 @@ float probe_bed_iterative(float x, float y)
         st_synchronize();
     }
     
+    // For storing average probe value from 10 iterations
+    float avg_probe_val;
+    avg_probe_val = 0.0;
+
+    for (int i = 0; i < 10; i++)
+    {
+        // Raise the probe 1mm above the bed
+        destination[Z_AXIS] += 1.0;
+        prepare_move();
+        st_synchronize();
+        
+        // Probe with defined autocalidation precision
+        while(READ(Z_MIN_PIN) == false)
+        {
+            destination[Z_AXIS] -= AUTOCALIBRATION_PRECISION;
+            prepare_move();
+            st_synchronize();
+        }
+        
+        // Add running total to average
+        avg_probe_val += destination[Z_AXIS];
+    }
+    
     // Returns the position of the nozzle when the probe deployed
-    return destination[Z_AXIS];
+    return avg_probe_val / 10.0;
+}
+
+// Returns true if the delta geometry is making the hotend concave
+boolean is_concave(float center_value, float probe_points[3])
+{
+    for (int i = 1; i < 3; i++)
+    {
+        // Is the center lower than any other probed point? If not, it's not concave
+        if (center_value <= probe_points[i])
+        {
+            return false;
+        }
+    }
+    // The center is higher than every probed point, therefore it is concave
+    return true;
+}
+
+// Returns true if the delta geometry is making the hotend convex
+boolean is_convex(float center_value, float probe_points[3])
+{
+    for (int i = 1; i < 3; i++)
+    {
+        // Is the center higher than any other probed point? If not, it's not convex
+        if (center_value >= probe_points[i])
+        {
+            return false;
+        }
+    }
+    // The center is lower than every probed point, therefore it is convex
+    return true;
 }
