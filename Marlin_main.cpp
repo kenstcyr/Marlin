@@ -2007,7 +2007,16 @@ void process_commands()
         SERIAL_ECHOLN("Adjusting for bed tilt");
         SERIAL_ECHOLN("");
       
-      
+        // Make sure the probe is deployed before starting
+        if (READ(Z_MIN_PIN))
+        {
+            SERIAL_ECHOLN("Z-Probe is not deployed. Please deploy probe manually before running the command.");
+            break;  
+        }
+        
+        // Home the printer
+        home_delta_axis();
+        
         // Variables for storing each probe result
         float tilt_probe_array[3];
         float center_probe_result;
@@ -2025,62 +2034,62 @@ void process_commands()
         tilt_probe_array[2] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_90, (BED_DIAMETER / 2 - 5) * SIN_90);       
 
 
-      // Print out a report of the positions
-      SERIAL_ECHOPAIR("Center: ", center_probe_result); 
-      SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("X Tower: ", tilt_probe_array[0]); 
-      SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("Y Tower: ", tilt_probe_array[1]); 
-      SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("Z Tower: ", tilt_probe_array[2]); 
-      SERIAL_ECHOLN("");
+        // Print out a report of the positions
+        SERIAL_ECHOPAIR("Center: ", center_probe_result); 
+        SERIAL_ECHOLN("");
+        SERIAL_ECHOPAIR("X Tower: ", tilt_probe_array[0]); 
+        SERIAL_ECHOLN("");
+        SERIAL_ECHOPAIR("Y Tower: ", tilt_probe_array[1]); 
+        SERIAL_ECHOLN("");
+        SERIAL_ECHOPAIR("Z Tower: ", tilt_probe_array[2]); 
+        SERIAL_ECHOLN("");
       
-      // Adjust X Endstop
-      if (center_probe_result < tilt_probe_array[0])
-          endstop_adj[0] += tilt_probe_array[0] - center_probe_result;
-      else
-          endstop_adj[0] += center_probe_result - tilt_probe_array[0];  
+        // Adjust X Endstop
+        if (center_probe_result < tilt_probe_array[0])
+            endstop_adj[0] += tilt_probe_array[0] - center_probe_result;
+        else
+            endstop_adj[0] += center_probe_result - tilt_probe_array[0];  
       
-      // Adjust Y Endstop
-      if (center_probe_result < tilt_probe_array[1])
-          endstop_adj[1] += tilt_probe_array[1] - center_probe_result;
-      else
-          endstop_adj[1] += center_probe_result - tilt_probe_array[1]; 
+        // Adjust Y Endstop
+        if (center_probe_result < tilt_probe_array[1])
+            endstop_adj[1] += tilt_probe_array[1] - center_probe_result;
+        else
+            endstop_adj[1] += center_probe_result - tilt_probe_array[1]; 
       
-      // Adjust Z Endstop
-      if (center_probe_result < tilt_probe_array[2])
-          endstop_adj[2] += tilt_probe_array[2] - center_probe_result;
-      else
-          endstop_adj[2] += center_probe_result - tilt_probe_array[2];
+        // Adjust Z Endstop
+        if (center_probe_result < tilt_probe_array[2])
+            endstop_adj[2] += tilt_probe_array[2] - center_probe_result;
+        else
+            endstop_adj[2] += center_probe_result - tilt_probe_array[2];
       
-      // Figure out which endstop is the highest up
-      float highest_endstop;
-      highest_endstop = endstop_adj[0];
-      if (endstop_adj[1] > highest_endstop) highest_endstop = endstop_adj[1];
-      if (endstop_adj[2] > highest_endstop) highest_endstop = endstop_adj[2];
-      
-      // Adjust all of the endstops so the highest one is at position zero
-      for (int i = 0; i < 3; i++)
-      {
-          endstop_adj[i] -= highest_endstop;
-      }    
+        // Figure out which endstop is the highest up
+        float highest_endstop;
+        highest_endstop = endstop_adj[0];
+        if (endstop_adj[1] > highest_endstop) highest_endstop = endstop_adj[1];
+        if (endstop_adj[2] > highest_endstop) highest_endstop = endstop_adj[2];
+        
+        // Adjust all of the endstops so the highest one is at position zero
+        for (int i = 0; i < 3; i++)
+        {
+            endstop_adj[i] -= highest_endstop;
+        }    
        
-      // Adjust the bed height accordingly
-      max_pos[Z_AXIS] -= highest_endstop;
-      set_delta_constants();          
+        // Adjust the bed height accordingly
+        max_pos[Z_AXIS] -= highest_endstop;
+        set_delta_constants();          
       
-      // Home the printer
-      home_delta_axis();
+        // Home the printer
+        home_delta_axis();
       
-      SERIAL_ECHOLN("Tilt adjustment complete. New endstop values:");
-      SERIAL_ECHOPAIR("X Tower: ", endstop_adj[0]);
-      SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("Y Tower: ", endstop_adj[1]); 
-      SERIAL_ECHOLN("");
-      SERIAL_ECHOPAIR("Z Tower: ", endstop_adj[2]); 
-      SERIAL_ECHOLN("");
+        SERIAL_ECHOLN("Tilt adjustment complete. New endstop values:");
+        SERIAL_ECHOPAIR("X Tower: ", endstop_adj[0]);
+        SERIAL_ECHOLN("");
+        SERIAL_ECHOPAIR("Y Tower: ", endstop_adj[1]); 
+        SERIAL_ECHOLN("");
+        SERIAL_ECHOPAIR("Z Tower: ", endstop_adj[2]); 
+        SERIAL_ECHOLN("");
       
-      break;
+        break;
 
     // ---- Automatic Delta Radius adjustment ----
     // ---- Added by Ken St. Cyr ---- 
