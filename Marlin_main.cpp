@@ -2004,6 +2004,7 @@ void process_commands()
     // ---- Automatic Bed tilt adjustment ----
     // ---- Added by Ken St. Cyr ----    
     case 31:
+    {
         SERIAL_ECHOLN("Adjusting for bed tilt");
         SERIAL_ECHOLN("");
       
@@ -2019,52 +2020,44 @@ void process_commands()
         
         // Variables for storing each probe result
         float tilt_probe_array[3];
-        float center_probe_result;
         
         // Probe the Center
-        center_probe_result = probe_bed_iterative(0, 0);
+        float center_probe_result = probe_bed_iterative(0, 0);
+        SERIAL_ECHOPAIR("Center: ", center_probe_result); 
+        SERIAL_ECHOLN("");
         
         // Probe near X Tower @ 210 Degrees
         tilt_probe_array[0] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_210, (BED_DIAMETER / 2 - 5) * SIN_210);
-   
-        // Probe near Y Tower @ 330 Degrees     
-        tilt_probe_array[1] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_330, (BED_DIAMETER / 2 - 5) * SIN_330);     
-
-        // Probe near Z Tower @ 90 Degrees
-        tilt_probe_array[2] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_90, (BED_DIAMETER / 2 - 5) * SIN_90);       
-
-
-        // Print out a report of the positions
-        SERIAL_ECHOPAIR("Center: ", center_probe_result); 
-        SERIAL_ECHOLN("");
         SERIAL_ECHOPAIR("X Tower: ", tilt_probe_array[0]); 
         SERIAL_ECHOLN("");
+        
+        // Probe near Y Tower @ 330 Degrees     
+        tilt_probe_array[1] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_330, (BED_DIAMETER / 2 - 5) * SIN_330);     
         SERIAL_ECHOPAIR("Y Tower: ", tilt_probe_array[1]); 
         SERIAL_ECHOLN("");
+        
+        // Probe near Z Tower @ 90 Degrees
+        tilt_probe_array[2] = probe_bed_iterative((BED_DIAMETER / 2 - 5) * COS_90, (BED_DIAMETER / 2 - 5) * SIN_90);       
         SERIAL_ECHOPAIR("Z Tower: ", tilt_probe_array[2]); 
         SERIAL_ECHOLN("");
       
-        // Adjust X Endstop
-        if (center_probe_result < tilt_probe_array[0])
-            endstop_adj[0] += tilt_probe_array[0] - center_probe_result;
-        else
-            endstop_adj[0] += center_probe_result - tilt_probe_array[0];  
-      
-        // Adjust Y Endstop
-        if (center_probe_result < tilt_probe_array[1])
-            endstop_adj[1] += tilt_probe_array[1] - center_probe_result;
-        else
-            endstop_adj[1] += center_probe_result - tilt_probe_array[1]; 
-      
-        // Adjust Z Endstop
-        if (center_probe_result < tilt_probe_array[2])
-            endstop_adj[2] += tilt_probe_array[2] - center_probe_result;
-        else
-            endstop_adj[2] += center_probe_result - tilt_probe_array[2];
+        // Find the tower that the nozzle is the highest from
+        float target_height = 0.0;
+        for (int i = 0; i < 3; i++)
+        {
+            if (tilt_probe_array[i] > target_height)
+            {
+                target_height = tilt_probe_array[i];
+            }
+        }
+        
+        // Adjust Endstops
+        endstop_adj[0] -= target_height - tilt_probe_array[0];
+        endstop_adj[1] -= target_height - tilt_probe_array[1];
+        endstop_adj[2] -= target_height - tilt_probe_array[2];
       
         // Figure out which endstop is the highest up
-        float highest_endstop;
-        highest_endstop = endstop_adj[0];
+        float highest_endstop = endstop_adj[0];
         if (endstop_adj[1] > highest_endstop) highest_endstop = endstop_adj[1];
         if (endstop_adj[2] > highest_endstop) highest_endstop = endstop_adj[2];
         
@@ -2075,7 +2068,7 @@ void process_commands()
         }    
        
         // Adjust the bed height accordingly
-        max_pos[Z_AXIS] -= highest_endstop;
+        max_pos[Z_AXIS] -= center_probe_result + z_probe_offset[Z_AXIS];//highest_endstop;
         set_delta_constants();          
       
         // Home the printer
@@ -2090,7 +2083,7 @@ void process_commands()
         SERIAL_ECHOLN("");
       
         break;
-
+    }
     // ---- Automatic Delta Radius adjustment ----
     // ---- Added by Ken St. Cyr ---- 
     case 32:
@@ -4082,7 +4075,7 @@ float probe_bed_iterative(float x, float y)
     for (int i = 0; i < 10; i++)
     {
         // Raise the probe 1mm above the bed
-        destination[Z_AXIS] += 1.0;
+        destination[Z_AXIS] += 5.0;
         prepare_move();
         st_synchronize();
         
